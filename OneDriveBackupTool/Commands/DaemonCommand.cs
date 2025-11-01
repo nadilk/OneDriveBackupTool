@@ -14,6 +14,7 @@ public class DaemonCommand : ICommand
             Logger.Log("Usage: daemon <configFolder>");
             return;
         }
+
         string configFolder = args[0];
         var daemonService = new DaemonService();
         await daemonService.Run(configFolder);

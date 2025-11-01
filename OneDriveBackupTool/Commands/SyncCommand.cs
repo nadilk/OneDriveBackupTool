@@ -15,12 +15,14 @@ public class SyncCommand : ICommand
             Logger.Log("Usage: sync <configPath>");
             return;
         }
+
         string configPath = args[0];
         if (!File.Exists(configPath))
         {
             Logger.Log($"Error: Config file '{configPath}' does not exist.");
             return;
         }
+
         var config = new ConfigurationBuilder()
         .SetBasePath(Directory.GetCurrentDirectory())
         .AddJsonFile(configPath, optional: false, reloadOnChange: true)
@@ -47,8 +49,9 @@ public class SyncCommand : ICommand
             Logger.Log($"Error: Failed to load or parse config file '{configPath}': {ex.Message}");
             return;
         }
-        Logger.Log("Starting OneDrive Backup Tool");
-        var backupService = new BackupService(jobConfig);
+
+        Logger.Log($"Starting OneDrive Backup Tool in '{jobConfig.SyncMode}' mode");
+        var backupService = BackupServiceBase.Create(jobConfig);
         await backupService.Run();
         Logger.Log("Backup completed.");
     }

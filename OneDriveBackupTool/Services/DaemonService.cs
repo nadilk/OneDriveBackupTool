@@ -52,16 +52,18 @@ public class DaemonService
 
     private async Task RunJobLoop(BackupJobConfig job, string configPath)
     {
-        var backupService = new BackupService(job);
-        var jobKey = $"{job.AccountName}|{configPath}";
+        var backupService = BackupServiceBase.Create(job);
+        var jobKey = $"{job.AccountName}|{configPath}|{job.SyncMode}";
+
         var interval = TimeSpan.FromMinutes(Math.Max(1, job.BackupIntervalMinutes));
+
         while (true)
         {
             if (RunningJobs.TryAdd(jobKey, null))
             {
                 try
                 {
-                    Logger.Log($"[Daemon] Running backup for {job.AccountName} from {configPath}");
+                    Logger.Log($"[Daemon] Running backup for {job.AccountName} from {configPath} in {job.SyncMode} mode");
                     await backupService.Run();
                 }
                 catch (Exception ex)

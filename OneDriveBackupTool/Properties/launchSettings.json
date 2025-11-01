@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "OneDriveBackupTool": {
+      "commandName": "Project"
+    },
+    "delta_sync": {
+      "commandName": "Project",
+      "commandLineArgs": "sync \"C:\\Users\\nadil\\source\\repos\\OneDriveBackupTool\\OneDriveBackupTool\\Test\\jobs\\backup2.json\""
+    }
+  }
+}

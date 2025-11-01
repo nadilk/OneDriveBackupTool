@@ -1,7 +1,15 @@
+using System.Text.Json.Serialization;
+
 namespace OneDriveBackupTool.Configuration;
 
 public class BackupJobConfig
 {
+    public enum SyncModeType
+    {
+        Delta,
+        Full
+    }
+
     const int DefaultMaxConcurrency = 4;
     const int DefaultBackupIntervalMinutes = 60;
 
@@ -15,4 +23,6 @@ public class BackupJobConfig
     public int BackupIntervalMinutes { get; set; } = DefaultBackupIntervalMinutes;
     public List<string> Excluded { get; set; } = new();
     public int MaxConcurrency { get; set; } = DefaultMaxConcurrency;
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public SyncModeType SyncMode { get; set; } = SyncModeType.Delta;
 }
