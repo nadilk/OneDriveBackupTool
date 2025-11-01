@@ -7,7 +7,7 @@ using OneDriveBackupTool.Utils;
 if (args.Length == 0)
 {
     Logger.Log("Error: You must provide a command and config file path.");
-    Logger.Log("Usage: sync <configPath> | authorize <configPath>");
+    Logger.Log("Usage: sync <configPath> | authorize <configPath> | daemon <configFolder>");
     return 1;
 }
 
@@ -22,6 +22,9 @@ switch (command)
     case "sync":
         cmd = new SyncCommand();
         break;
+    case "daemon":
+        cmd = new DaemonCommand();
+        break;
     default:
         // Default to sync if only config path is provided
         if (args.Length == 1 && File.Exists(args[0]))
@@ -32,7 +35,7 @@ switch (command)
         else
         {
             Logger.Log($"Unknown command: {command}");
-            Logger.Log("Usage: sync <configPath> | authorize <configPath>");
+            Logger.Log("Usage: sync <configPath> | authorize <configPath> | daemon <configFolder>");
             return 1;
         }
         break;

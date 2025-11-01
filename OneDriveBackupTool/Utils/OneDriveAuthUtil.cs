@@ -85,18 +85,7 @@ public static class OneDriveAuthUtil
             BackupIntervalMinutes = interval > 0 ? interval : 60
         };
 
-        RootConfig config;
-        if (File.Exists(configPath))
-        {
-            var json = await File.ReadAllTextAsync(configPath);
-            config = JsonSerializer.Deserialize<RootConfig>(json) ?? new RootConfig();
-        }
-        else
-        {
-            config = new RootConfig();
-        }
-        config.BackupJobs.Add(job);
-        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }));
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(job, new JsonSerializerOptions { WriteIndented = true }));
         Logger.Log($"Configuration for '{accountName}' saved to {configPath}");
     }
 }

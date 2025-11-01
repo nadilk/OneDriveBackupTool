@@ -32,13 +32,13 @@ public class SyncCommand : ICommand
             return;
         }
 
-        RootConfig? rootConfig = null;
+        BackupJobConfig? jobConfig = null;
         try
         {
-            rootConfig = config.Get<RootConfig>();
-            if (rootConfig == null)
+            jobConfig = config.Get<BackupJobConfig>();
+            if (jobConfig == null)
             {
-                Logger.Log("Error: Deserialized RootConfig is null. Check your config file structure.");
+                Logger.Log("Error: Deserialized BackupJobConfig is null. Check your config file structure.");
                 return;
             }
         }
@@ -48,8 +48,8 @@ public class SyncCommand : ICommand
             return;
         }
         Logger.Log("Starting OneDrive Backup Tool");
-        var backupService = new BackupService();
-        await backupService.Run(rootConfig);
+        var backupService = new BackupService(jobConfig);
+        await backupService.Run();
         Logger.Log("Backup completed.");
     }
 }

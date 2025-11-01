@@ -10,50 +10,52 @@ namespace OneDriveBackupTool.Services;
 
 public class BackupService
 {
-    public async Task Run(RootConfig config)
+    private readonly BackupJobConfig _job;
+
+    public BackupService(BackupJobConfig job)
     {
-        var tasks = config.BackupJobs.Select(job => RunBackupJobAsync(job));
-        await Task.WhenAll(tasks);
+        _job = job;
     }
 
-    private async Task RunBackupJobAsync(BackupJobConfig job)
+    public async Task Run()
     {
-        Logger.Log($"Starting backup for account: {job.AccountName}");
+        Logger.Log($"Starting backup for account: {_job.AccountName}");
         try
         {
-            string accessToken = await GetAccessTokenAsync(job);
+            string accessToken = await GetAccessTokenAsync();
 
-            var (remoteFiles, remoteDirsSet) = await ListOneDriveFilesAsync(job, accessToken);
+            var (remoteFiles, remoteDirsSet) = await ListOneDriveFilesAsync(accessToken);
 
-            var metadataPath = Path.Combine(job.LocalTargetDirectory, ".onedrive-backup-metadata.json");
+            var metadataPath = Path.Combine(_job.LocalTargetDirectory, ".onedrive-backup-metadata.json");
             var metadata = await LoadMetadataAsync(metadataPath);
 
             var remoteFileSet = remoteFiles.Select(f => f.FileName).ToHashSet();
-            // Ensure root directory is included
-            remoteDirsSet.Add(job.OneDriveDirectory);
+            // Add root directory
+            remoteDirsSet.Add(_job.OneDriveDirectory);
 
 
             // Delete local files not present in OneDrive
-            DeleteLocalFilesNotInRemote(job.LocalTargetDirectory, remoteFileSet);
+            DeleteLocalFilesNotInRemote(remoteFileSet);
             // Delete local directories not present in OneDrive
-            DeleteLocalDirectoriesNotInRemote(job.LocalTargetDirectory, remoteDirsSet);
+            DeleteLocalDirectoriesNotInRemote(remoteDirsSet);
             // Create any missing local directories for all OneDrive directories
-            EnsureLocalDirectoriesExist(job.LocalTargetDirectory, remoteDirsSet);
+            EnsureLocalDirectoriesStructure(remoteDirsSet);
 
-            int maxConcurrency = 4;
-            using var semaphore = new SemaphoreSlim(maxConcurrency);
+
+            using var semaphore = new SemaphoreSlim(_job.MaxConcurrency);
+
             var downloadTasks = remoteFiles.Select(async file =>
             {
                 await semaphore.WaitAsync();
                 try
                 {
                     var relPath = file.FileName.Replace("\\", "/");
-                    if (metadata.Files.TryGetValue(relPath, out var meta) && meta.ETag == file.ETag && File.Exists(Path.Combine(job.LocalTargetDirectory, file.FileName.TrimStart('/', '\\'))))
+                    if (metadata.Files.TryGetValue(relPath, out var meta) && meta.ETag == file.ETag && File.Exists(Path.Combine(_job.LocalTargetDirectory, file.FileName.TrimStart('/', '\\'))))
                     {
                         // Skip unchanged file
                         return;
                     }
-                    await DownloadFileAsync(job, file, accessToken);
+                    await DownloadFileAsync(file, accessToken);
                     metadata.Files[relPath] = file;
                 }
                 finally
@@ -65,25 +67,25 @@ public class BackupService
             metadata.LastBackupTime = DateTime.UtcNow;
             metadata.TotalFilesBackedUp = metadata.Files.Count;
             await SaveMetadataAsync(metadataPath, metadata);
-            Logger.Log($"Backup completed for account: {job.AccountName}");
+            Logger.Log($"Backup completed for account: {_job.AccountName}");
         }
         catch (Exception ex)
         {
-            Logger.Log($"Error in backup for {job.AccountName}: {ex.Message}");
+            Logger.Log($"Error in backup for {_job.AccountName}: {ex.Message}");
         }
     }
 
-    private async Task<string> GetAccessTokenAsync(BackupJobConfig job)
+    private async Task<string> GetAccessTokenAsync()
     {
         using var http = new HttpClient();
         var tokenReq = new HttpRequestMessage(HttpMethod.Post, "https://login.live.com/oauth20_token.srf")
         {
             Content = new FormUrlEncodedContent(new[]
             {
-                new KeyValuePair<string, string>("client_id", job.ClientId),
+                new KeyValuePair<string, string>("client_id", _job.ClientId),
                 new KeyValuePair<string, string>("redirect_uri", "https://login.microsoftonline.com/common/oauth2/nativeclient"),
-                new KeyValuePair<string, string>("client_secret", job.ClientSecret),
-                new KeyValuePair<string, string>("refresh_token", job.RefreshToken),
+                new KeyValuePair<string, string>("client_secret", _job.ClientSecret),
+                new KeyValuePair<string, string>("refresh_token", _job.RefreshToken),
                 new KeyValuePair<string, string>("grant_type", "refresh_token"),
             })
         };
@@ -96,23 +98,23 @@ public class BackupService
         return root.GetProperty("access_token").GetString() ?? throw new Exception("No access_token in response");
     }
 
-    private async Task<(List<OneDriveFile> Files, HashSet<string> Dirs)> ListOneDriveFilesAsync(BackupJobConfig job, string accessToken)
+    private async Task<(List<OneDriveFile> Files, HashSet<string> Dirs)> ListOneDriveFilesAsync(string accessToken)
     {
         var files = new List<OneDriveFile>();
         var oneDriveDirs = new HashSet<string>();
         using var http = new HttpClient();
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         string baseUrl = "https://graph.microsoft.com/v1.0/me/drive/root";
-        string path = string.IsNullOrWhiteSpace(job.OneDriveDirectory) || job.OneDriveDirectory == "/" ? "" : $":{job.OneDriveDirectory}:";
+        string path = string.IsNullOrWhiteSpace(_job.OneDriveDirectory) || _job.OneDriveDirectory == "/" ? "" : $":{_job.OneDriveDirectory}:";
         string url = $"{baseUrl}{path}/children?$top=999";
 
-        Logger.Log($"Listing OneDrive files in directory: {job.OneDriveDirectory}");
-        await ListFilesRecursiveAsync(http, url, files, oneDriveDirs, job.OneDriveDirectory, job);
+        Logger.Log($"Listing OneDrive files in directory: {_job.OneDriveDirectory}");
+        await ListFilesRecursiveAsync(http, url, files, oneDriveDirs, _job.OneDriveDirectory);
         Logger.Log($"Total files listed: {files.Count}");
         return (files, oneDriveDirs);
     }
 
-    private async Task ListFilesRecursiveAsync(HttpClient http, string url, List<OneDriveFile> files, HashSet<string> oneDriveDirs, string parentPath, BackupJobConfig job)
+    private async Task ListFilesRecursiveAsync(HttpClient http, string url, List<OneDriveFile> files, HashSet<string> oneDriveDirs, string parentPath)
     {
         while (!string.IsNullOrEmpty(url))
         {
@@ -132,7 +134,7 @@ public class BackupService
                 var relPath = System.IO.Path.Combine(parentPath, name).Replace('\\', '/');
 
                 // Unified exclusion logic
-                if (job.Excluded.Any(pattern => relPath.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
+                if (_job.Excluded.Any(pattern => relPath.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
                 {
                     Logger.Log($"Excluded (file/folder): {relPath}");
                     continue;
@@ -143,7 +145,7 @@ public class BackupService
                     // Track OneDrive directory only
                     oneDriveDirs.Add(relPath);
                     string folderUrl = $"https://graph.microsoft.com/v1.0/me/drive/items/{id}/children?$top=999";
-                    await ListFilesRecursiveAsync(http, folderUrl, files, oneDriveDirs, relPath, job);
+                    await ListFilesRecursiveAsync(http, folderUrl, files, oneDriveDirs, relPath);
                 }
                 else
                 {
@@ -169,11 +171,11 @@ public class BackupService
         }
     }
 
-    private void EnsureLocalDirectoriesExist(string localRoot, HashSet<string> remoteDirSet)
+    private void EnsureLocalDirectoriesStructure(HashSet<string> remoteDirSet)
     {
         foreach (var relPath in remoteDirSet)
         {
-            var localDir = Path.Combine(localRoot, relPath.TrimStart('/', '\\'));
+            var localDir = Path.Combine(_job.LocalTargetDirectory, relPath.TrimStart('/', '\\'));
             if (!Directory.Exists(localDir))
             {
                 Directory.CreateDirectory(localDir);
@@ -182,12 +184,12 @@ public class BackupService
         }
     }
 
-    private async Task DownloadFileAsync(BackupJobConfig job, OneDriveFile file, string accessToken)
+    private async Task DownloadFileAsync(OneDriveFile file, string accessToken)
     {
         using var http = new HttpClient();
         http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         string url = $"https://graph.microsoft.com/v1.0/me/drive/root:/{file.FileName}:/content";
-        string localPath = Path.Combine(job.LocalTargetDirectory, file.FileName.TrimStart('/', '\\'));
+        string localPath = Path.Combine(_job.LocalTargetDirectory, file.FileName.TrimStart('/', '\\'));
         Directory.CreateDirectory(Path.GetDirectoryName(localPath)!);
         using var resp = await http.GetAsync(url);
         if (!resp.IsSuccessStatusCode)
@@ -214,11 +216,11 @@ public class BackupService
         await File.WriteAllTextAsync(metadataPath, json);
     }
 
-    private void DeleteLocalFilesNotInRemote(string localRoot, HashSet<string> remoteFileSet)
+    private void DeleteLocalFilesNotInRemote(HashSet<string> remoteFileSet)
     {
-        foreach (var file in Directory.EnumerateFiles(localRoot, "*", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(_job.LocalTargetDirectory, "*", SearchOption.AllDirectories))
         {
-            var relPath = Path.GetRelativePath(localRoot, file).Replace("\\", "/");
+            var relPath = Path.GetRelativePath(_job.LocalTargetDirectory, file).Replace("\\", "/");
             if (relPath == ".onedrive-backup-metadata.json")
                 continue;
 
@@ -239,13 +241,15 @@ public class BackupService
         }
     }
 
-    private void DeleteLocalDirectoriesNotInRemote(string localRoot, HashSet<string> remoteDirSet)
+    private void DeleteLocalDirectoriesNotInRemote(HashSet<string> remoteDirSet)
     {
-        foreach (var dir in Directory.EnumerateDirectories(localRoot, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length))
+        foreach (var dir in Directory.EnumerateDirectories(_job.LocalTargetDirectory, "*", SearchOption.AllDirectories).OrderByDescending(d => d.Length))
         {
-            var relPath = Path.GetRelativePath(localRoot, dir).Replace("\\", "/");
-           
-            if (!remoteDirSet.Contains("/" + relPath))
+            var relPath = Path.GetRelativePath(_job.LocalTargetDirectory, dir).Replace("\\", "/");
+
+            var oneDriveDirPath = '/' + relPath;
+
+            if (!remoteDirSet.Contains(oneDriveDirPath))
             {
                 try
                 {
