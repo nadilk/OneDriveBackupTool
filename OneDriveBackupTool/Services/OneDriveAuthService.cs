@@ -4,9 +4,9 @@ using System.Web;
 using OneDriveBackupTool.Configuration;
 using OneDriveBackupTool.Utils; // Added for Logger
 
-namespace OneDriveBackupTool.Utils;
+namespace OneDriveBackupTool.Services;
 
-public static class OneDriveAuthUtil
+public static class OneDriveAuthService
 {
     private const string AuthEndpoint = "https://login.live.com/oauth20_authorize.srf";
     private const string TokenEndpoint = "https://login.live.com/oauth20_token.srf";

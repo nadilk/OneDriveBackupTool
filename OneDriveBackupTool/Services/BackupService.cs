@@ -17,9 +17,11 @@ public class BackupService
         _job = job;
     }
 
+    private void Log(string message) => Logger.Log($"[Job-{_job.AccountName}] {message}");
+
     public async Task Run()
     {
-        Logger.Log($"Starting backup for account: {_job.AccountName}");
+        Log($"Starting backup for account: {_job.AccountName}");
         try
         {
             string accessToken = await GetAccessTokenAsync();
@@ -67,11 +69,11 @@ public class BackupService
             metadata.LastBackupTime = DateTime.UtcNow;
             metadata.TotalFilesBackedUp = metadata.Files.Count;
             await SaveMetadataAsync(metadataPath, metadata);
-            Logger.Log($"Backup completed for account: {_job.AccountName}");
+            Log($"Backup completed for account: {_job.AccountName}");
         }
         catch (Exception ex)
         {
-            Logger.Log($"Error in backup for {_job.AccountName}: {ex.Message}");
+            Log($"Error in backup for {_job.AccountName}: {ex.Message}");
         }
     }
 
@@ -108,9 +110,9 @@ public class BackupService
         string path = string.IsNullOrWhiteSpace(_job.OneDriveDirectory) || _job.OneDriveDirectory == "/" ? "" : $":{_job.OneDriveDirectory}:";
         string url = $"{baseUrl}{path}/children?$top=999";
 
-        Logger.Log($"Listing OneDrive files in directory: {_job.OneDriveDirectory}");
+        Log($"Listing OneDrive files in directory: {_job.OneDriveDirectory}");
         await ListFilesRecursiveAsync(http, url, files, oneDriveDirs, _job.OneDriveDirectory);
-        Logger.Log($"Total files listed: {files.Count}");
+        Log($"Total files listed: {files.Count}");
         return (files, oneDriveDirs);
     }
 
@@ -136,7 +138,7 @@ public class BackupService
                 // Unified exclusion logic
                 if (_job.Excluded.Any(pattern => relPath.Contains(pattern, StringComparison.OrdinalIgnoreCase)))
                 {
-                    Logger.Log($"Excluded (file/folder): {relPath}");
+                    Log($"Excluded (file/folder): {relPath}");
                     continue;
                 }
 
@@ -156,7 +158,7 @@ public class BackupService
                         LastModified = lastModified,
                         ETag = eTag
                     });
-                    Logger.Log($"OneDrive file: {relPath} (ETag: {eTag})");
+                    Log($"OneDrive file: {relPath} (ETag: {eTag})");
                 }
             }
             // Handle pagination
@@ -179,7 +181,7 @@ public class BackupService
             if (!Directory.Exists(localDir))
             {
                 Directory.CreateDirectory(localDir);
-                Logger.Log($"Created local directory for OneDrive folder: {relPath}");
+                Log($"Created local directory for OneDrive folder: {relPath}");
             }
         }
     }
@@ -194,12 +196,12 @@ public class BackupService
         using var resp = await http.GetAsync(url);
         if (!resp.IsSuccessStatusCode)
         {
-            Logger.Log($"Failed to download {file.FileName}: {await resp.Content.ReadAsStringAsync()}");
+            Log($"Failed to download {file.FileName}: {await resp.Content.ReadAsStringAsync()}");
             return;
         }
         using var fs = new FileStream(localPath, FileMode.Create, FileAccess.Write, FileShare.None);
         await resp.Content.CopyToAsync(fs);
-        Logger.Log($"Downloaded: {file.FileName}");
+        Log($"Downloaded: {file.FileName}");
     }
 
     private async Task<BackupMetadata> LoadMetadataAsync(string metadataPath)
@@ -231,11 +233,11 @@ public class BackupService
                 try
                 {
                     File.Delete(file);
-                    Logger.Log($"Deleted local file not in OneDrive: {relPath}");
+                    Log($"Deleted local file not in OneDrive: {relPath}");
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log($"Failed to delete {relPath}: {ex.Message}");
+                    Log($"Failed to delete {relPath}: {ex.Message}");
                 }
             }
         }
@@ -254,11 +256,11 @@ public class BackupService
                 try
                 {
                     Directory.Delete(dir, true);
-                    Logger.Log($"Deleted local directory not in OneDrive: {relPath}");
+                    Log($"Deleted local directory not in OneDrive: {relPath}");
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log($"Failed to delete directory {relPath}: {ex.Message}");
+                    Log($"Failed to delete directory {relPath}: {ex.Message}");
                 }
             }
         }

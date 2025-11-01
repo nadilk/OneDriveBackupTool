@@ -1,3 +1,4 @@
+using OneDriveBackupTool.Services;
 using OneDriveBackupTool.Utils;
 
 namespace OneDriveBackupTool.Commands;
@@ -13,6 +14,6 @@ public class AuthorizeCommand : ICommand
             return;
         }
         string configPath = args[0];
-        await OneDriveAuthUtil.AuthorizeAndCreateConfigAsync(configPath);
+        await OneDriveAuthService.AuthorizeAndCreateConfigAsync(configPath);
     }
 }
